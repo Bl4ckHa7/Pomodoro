@@ -39,7 +39,7 @@
                         } else {
                             stopTimer();
                             alert('Pomodoro finalizado!');
-                            timeRemaining = 25 * 60;
+                            timeRemaining = 40 * 60;
                             updateDisplay();
                             startBtn.textContent = 'Iniciar';
                         }
