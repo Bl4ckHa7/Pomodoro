@@ -6,7 +6,7 @@
 
                 body {
                     background-color: #000;
-                    color: #0f0;
+                    color: #00AEEF;
                     font-family: 'Courier New', Courier, monospace;
                     display: flex;
                     justify-content: center;
@@ -50,7 +50,7 @@
                     margin-top: 2rem;
                     padding: 0.7rem 2rem;
                     font-size: 1.2em;
-                    background-color: #0f0;
+                    background-color: #00AEEF;
                     color: #000;
                     border: none;
                     border-radius: 10px;
@@ -60,11 +60,11 @@
                 }
 
                 button:hover {
-                    background-color: #00cc00;
+                    background-color: #00AEEF;
                 }
 
                 .glitch {
-                    color: #0f0;
+                    color: #00AEEF;
                     position: relative;
                     animation: glitch 1s infinite;
                 }
