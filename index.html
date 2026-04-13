@@ -3,1362 +3,173 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Focus Timer — Pomodoro</title>
-  <style>
-    /* =====================================================================
-       CSS Custom Properties — Temas claro e escuro
-    ===================================================================== */
-    :root {
-      --bg:           #000000;
-      --surface:      #1a1a24;
-      --surface-2:    #24243a;
-      --border:       #2e2e45;
-      --text:         #e8e8f0;
-      --text-muted:   #8888aa;
-      --primary:      #7c6ff7;
-      --primary-glow: rgba(124,111,247,0.25);
-      --shadow-sm:    0 2px 8px rgba(0,0,0,0.25);
-      --shadow-md:    0 4px 20px rgba(0,0,0,0.35);
-      --shadow-lg:    0 8px 40px rgba(0,0,0,0.45);
-      --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px;
-      --t: 0.25s ease;
-      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      /* Cor dinâmica de modo (sobrescrita por JS) */
-      --mode-color: #7c6ff7;
-      --mode-glow:  rgba(124,111,247,0.25);
-    }
-
-    [data-theme="light"] {
-      --bg:           #f2f2f8;
-      --surface:      #ffffff;
-      --surface-2:    #ebebf5;
-      --border:       #d5d5e8;
-      --text:         #1a1a2e;
-      --text-muted:   #6060a0;
-      --shadow-sm:    0 2px 8px rgba(0,0,0,0.07);
-      --shadow-md:    0 4px 20px rgba(0,0,0,0.10);
-      --shadow-lg:    0 8px 40px rgba(0,0,0,0.12);
-    }
-
-    /* =====================================================================
-       Matrix Canvas
-    ===================================================================== */
-    #matrix {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 0;
-      pointer-events: none;
-      /* Oculto no tema claro */
-      opacity: 1;
-      transition: opacity 0.5s ease;
-    }
-    [data-theme="light"] #matrix { opacity: 0; }
-
-    /* =====================================================================
-       Reset & Base
-    ===================================================================== */
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
-      transition: background var(--t), color var(--t);
-    }
-
-    /* =====================================================================
-       App Shell
-    ===================================================================== */
-    .app {
-      width: 100%;
-      max-width: 480px;
-      display: flex;
-      flex-direction: column;
-      gap: 0.9rem;
-      position: relative;
-      z-index: 2;
-    }
-
-    /* =====================================================================
-       Header
-    ===================================================================== */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 0.25rem;
-    }
-
-    .header__logo {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text-muted);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .header__actions { display: flex; gap: 0.5rem; }
-
-    .icon-btn {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      border-radius: var(--r-sm);
-      width: 38px; height: 38px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      transition: all var(--t);
-      font-size: 1rem;
-    }
-    .icon-btn:hover {
-      background: var(--surface-2);
-      color: var(--text);
-      border-color: var(--mode-color);
-    }
-
-    /* =====================================================================
-       Mode Tabs
-    ===================================================================== */
-    .mode-tabs {
-      display: flex;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-      padding: 5px;
-      gap: 4px;
-    }
-
-    .mode-tab {
-      flex: 1;
-      padding: 0.55rem 0.5rem;
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
-      border-radius: var(--r-md);
-      cursor: pointer;
-      font-size: 0.8rem;
-      font-weight: 600;
-      font-family: var(--font);
-      transition: all var(--t);
-      white-space: nowrap;
-    }
-    .mode-tab.active {
-      background: var(--mode-color);
-      color: #fff;
-      box-shadow: 0 2px 12px var(--mode-glow);
-    }
-    .mode-tab:not(.active):hover {
-      background: var(--surface-2);
-      color: var(--text);
-    }
-
-    /* =====================================================================
-       Timer Card
-    ===================================================================== */
-    .timer-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-xl);
-      padding: 2.5rem 2rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2rem;
-      box-shadow: var(--shadow-md);
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Gradiente de fundo suave baseado no modo */
-    .timer-card::before {
-      content: '';
-      position: absolute;
-      top: -70%; left: 50%;
-      transform: translateX(-50%);
-      width: 320px; height: 320px;
-      background: radial-gradient(circle, var(--mode-glow) 0%, transparent 70%);
-      pointer-events: none;
-      transition: background 0.5s ease;
-    }
-
-    /* =====================================================================
-       Anel de Progresso (SVG)
-    ===================================================================== */
-    .ring-wrapper {
-      position: relative;
-      width: 210px; height: 210px;
-    }
-
-    .ring-svg {
-      width: 100%; height: 100%;
-      transform: rotate(-90deg);
-    }
-
-    .ring-track {
-      fill: none;
-      stroke: var(--surface-2);
-      stroke-width: 6;
-    }
-
-    .ring-progress {
-      fill: none;
-      stroke: var(--mode-color);
-      stroke-width: 6;
-      stroke-linecap: round;
-      transition: stroke-dashoffset 1s linear, stroke 0.4s ease;
-    }
-
-    .ring-center {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 0.3rem;
-    }
-
-    .timer-display {
-      font-size: 3.6rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--text);
-      font-variant-numeric: tabular-nums;
-      line-height: 1;
-    }
-
-    .timer-mode-label {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--mode-color);
-    }
-
-    /* Pulso animado quando rodando */
-    @keyframes pulse-ring {
-      0%   { transform: scale(1);    opacity: 0.7; }
-      100% { transform: scale(1.07); opacity: 0;   }
-    }
-    .ring-wrapper.running::after {
-      content: '';
-      position: absolute;
-      inset: -8px;
-      border-radius: 50%;
-      border: 2px solid var(--mode-color);
-      animation: pulse-ring 2.2s ease-out infinite;
-    }
-
-    /* =====================================================================
-       Controles
-    ===================================================================== */
-    .controls {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .btn-primary {
-      background: var(--mode-color);
-      color: #fff;
-      border: none;
-      border-radius: var(--r-lg);
-      padding: 0.85rem 2.8rem;
-      font-size: 1rem;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: var(--font);
-      letter-spacing: 0.04em;
-      transition: all var(--t);
-      box-shadow: 0 4px 16px var(--mode-glow);
-    }
-    .btn-primary:hover {
-      filter: brightness(1.12);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 24px var(--mode-glow);
-    }
-    .btn-primary:active { transform: translateY(0); }
-
-    .btn-icon {
-      background: var(--surface-2);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
-      width: 44px; height: 44px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      font-size: 1.1rem;
-      transition: all var(--t);
-    }
-    .btn-icon:hover {
-      background: var(--border);
-      color: var(--text);
-    }
-
-    /* =====================================================================
-       Info Chips
-    ===================================================================== */
-    .info-row {
-      display: flex;
-      gap: 0.6rem;
-      width: 100%;
-    }
-
-    .info-chip {
-      flex: 1;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
-      padding: 0.65rem 0.5rem;
-      text-align: center;
-    }
-    .info-chip__label {
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 0.2rem;
-    }
-    .info-chip__value {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    /* =====================================================================
-       Frase Motivacional
-    ===================================================================== */
-    .quote-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--mode-color);
-      border-radius: var(--r-md);
-      padding: 1rem 1.25rem;
-      font-size: 0.875rem;
-      color: var(--text-muted);
-      font-style: italic;
-      line-height: 1.6;
-      min-height: 58px;
-      display: flex;
-      align-items: center;
-      transition: border-color 0.4s ease;
-      list-style: none;
-    }
-
-    @keyframes fade-in {
-      from { opacity: 0; transform: translateY(5px); }
-      to   { opacity: 1; transform: translateY(0);   }
-    }
-    .fade-in { animation: fade-in 0.4s ease forwards; }
-
-    /* =====================================================================
-       Histórico
-    ===================================================================== */
-    .history-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-xl);
-      overflow: hidden;
-    }
-
-    .history-header {
-      padding: 0.9rem 1.25rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-    }
-    .history-header h3 {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .history-clear {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 0.75rem;
-      cursor: pointer;
-      font-family: var(--font);
-      transition: color var(--t);
-    }
-    .history-clear:hover { color: #ff6b6b; }
-
-    .history-list {
-      list-style: none;
-      max-height: 155px;
-      overflow-y: auto;
-    }
-    .history-list::-webkit-scrollbar { width: 4px; }
-    .history-list::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 2px;
-    }
-
-    .history-empty {
-      padding: 1.4rem;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.82rem;
-    }
-
-    .history-item {
-      display: flex;
-      align-items: center;
-      padding: 0.6rem 1.25rem;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.82rem;
-      transition: background var(--t);
-    }
-    .history-item:last-child { border-bottom: none; }
-    .history-item:hover { background: var(--surface-2); }
-
-    .h-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      margin-right: 0.75rem;
-      flex-shrink: 0;
-    }
-    .h-info { flex: 1; color: var(--text); }
-    .h-time { color: var(--text-muted); font-size: 0.74rem; }
-
-    /* =====================================================================
-       Painel de Configurações
-    ===================================================================== */
-    .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      backdrop-filter: blur(5px);
-      z-index: 100;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      padding: 1rem;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--t);
-    }
-    .overlay.open {
-      opacity: 1;
-      pointer-events: all;
-    }
-
-    .settings-panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-xl);
-      padding: 1.5rem;
-      width: 100%;
-      max-width: 480px;
-      box-shadow: var(--shadow-lg);
-      transform: translateY(20px);
-      transition: transform var(--t);
-    }
-    .overlay.open .settings-panel { transform: translateY(0); }
-
-    .settings-panel h2 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 1.25rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .s-group { margin-bottom: 1.2rem; }
-    .s-group__label {
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 0.7rem;
-    }
-    .s-row { display: flex; gap: 0.7rem; }
-
-    .s-field { flex: 1; }
-    .s-field label {
-      display: block;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 0.3rem;
-    }
-    .s-field input[type="number"] {
-      width: 100%;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--r-sm);
-      color: var(--text);
-      font-family: var(--font);
-      font-size: 0.9rem;
-      font-weight: 600;
-      padding: 0.5rem 0.7rem;
-      outline: none;
-      transition: border-color var(--t);
-    }
-    .s-field input[type="number"]:focus { border-color: var(--mode-color); }
-
-    .s-toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.55rem 0;
-    }
-    .s-toggle-row span { font-size: 0.875rem; }
-
-    /* Toggle switch */
-    .toggle { position: relative; width: 42px; height: 24px; }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-track {
-      position: absolute;
-      inset: 0;
-      background: var(--border);
-      border-radius: 24px;
-      cursor: pointer;
-      transition: background var(--t);
-    }
-    .toggle-track::before {
-      content: '';
-      position: absolute;
-      width: 18px; height: 18px;
-      left: 3px; top: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: transform var(--t);
-    }
-    .toggle input:checked + .toggle-track { background: var(--mode-color); }
-    .toggle input:checked + .toggle-track::before { transform: translateX(18px); }
-
-    .s-footer {
-      display: flex;
-      gap: 0.7rem;
-      margin-top: 1.2rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border);
-    }
-
-    .btn-save {
-      flex: 1;
-      background: var(--mode-color);
-      color: white;
-      border: none;
-      border-radius: var(--r-md);
-      padding: 0.75rem;
-      font-weight: 700;
-      font-size: 0.9rem;
-      cursor: pointer;
-      font-family: var(--font);
-      transition: filter var(--t);
-    }
-    .btn-save:hover { filter: brightness(1.1); }
-
-    .btn-cancel {
-      flex: 1;
-      background: var(--surface-2);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
-      padding: 0.75rem;
-      font-weight: 600;
-      font-size: 0.9rem;
-      cursor: pointer;
-      font-family: var(--font);
-      transition: color var(--t);
-    }
-    .btn-cancel:hover { color: var(--text); }
-
-    /* =====================================================================
-       Toast de Notificação
-    ===================================================================== */
-    .toast {
-      position: fixed;
-      top: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%) translateY(-120px);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
-      padding: 0.7rem 1.25rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      box-shadow: var(--shadow-lg);
-      z-index: 200;
-      transition: transform 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
-      white-space: nowrap;
-    }
-    .toast.show { transform: translateX(-50%) translateY(0); }
-
-    /* =====================================================================
-       Responsividade
-    ===================================================================== */
-    @media (max-width: 480px) {
-      body {
-        padding: 1rem;
-        justify-content: flex-start;
-        padding-top: 1.25rem;
-      }
-      .timer-display  { font-size: 3rem; }
-      .ring-wrapper   { width: 190px; height: 190px; }
-      .timer-card     { padding: 2rem 1.25rem; gap: 1.5rem; }
-      .btn-primary    { padding: 0.85rem 2.2rem; }
-    }
-  </style>
+  <title>Focus Timer</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ═══════════════════════════ APP ═══════════════════════════ -->
-<div class="app" id="app">
+  <!-- Matrix background -->
+  <canvas id="matrix"></canvas>
 
-  <!-- Cabeçalho -->
-  <header class="header">
-    <span class="header__logo">Focus Timer</span>
-    <div class="header__actions">
-      <button class="icon-btn" id="themeBtn"    title="Alternar tema">🌙</button>
-      <button class="icon-btn" id="settingsBtn" title="Configurações">⚙️</button>
-    </div>
-  </header>
+  <!-- ══════════════════════ APP ══════════════════════ -->
+  <div class="app" id="app">
 
-  <!-- Abas de Modo -->
-  <nav class="mode-tabs" role="tablist">
-    <button class="mode-tab active" data-mode="work"  role="tab">Foco</button>
-    <button class="mode-tab"        data-mode="short" role="tab">Pausa Curta</button>
-    <button class="mode-tab"        data-mode="long"  role="tab">Pausa Longa</button>
-  </nav>
-
-  <!-- Card do Timer -->
-  <main class="timer-card">
-    <!-- Anel de progresso -->
-    <div class="ring-wrapper" id="ringWrapper">
-      <svg class="ring-svg" viewBox="0 0 210 210" aria-hidden="true">
-        <circle class="ring-track"    cx="105" cy="105" r="95"/>
-        <circle class="ring-progress" cx="105" cy="105" r="95" id="ringProgress"/>
-      </svg>
-      <div class="ring-center">
-        <div class="timer-display" id="timerDisplay" aria-live="polite">25:00</div>
-        <div class="timer-mode-label" id="modeLabel">Foco</div>
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="logo-text">Focus Timer</span>
       </div>
-    </div>
-
-    <!-- Botões de controle -->
-    <div class="controls">
-      <button class="btn-icon" id="resetBtn" title="Resetar">↺</button>
-      <button class="btn-primary" id="startBtn">Iniciar</button>
-      <button class="btn-icon" id="skipBtn"  title="Pular fase">⏭</button>
-    </div>
-
-    <!-- Estatísticas rápidas -->
-    <div class="info-row">
-      <div class="info-chip">
-        <div class="info-chip__label">Sessão</div>
-        <div class="info-chip__value" id="sessionLabel">Pomodoro #1</div>
+      <div class="header-right">
+        <button class="icon-btn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="themeIcon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" title="Configurações" aria-label="Configurações">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
-      <div class="info-chip">
-        <div class="info-chip__label">Ciclos Hoje</div>
-        <div class="info-chip__value" id="cyclesCount">0</div>
-      </div>
-      <div class="info-chip">
-        <div class="info-chip__label">Tempo Foco</div>
-        <div class="info-chip__value" id="focusTime">0min</div>
-      </div>
-    </div>
-  </main>
+    </header>
 
-  <!-- Frase Motivacional -->
-  <p class="quote-card" id="quoteCard" aria-live="polite">
-    ✨ Comece por onde você está. Use o que você tem. Faça o que você pode.
-  </p>
+    <!-- Mode tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-mode="work"  role="tab" aria-selected="true">Foco</button>
+      <button class="tab"        data-mode="short" role="tab" aria-selected="false">Pausa Curta</button>
+      <button class="tab"        data-mode="long"  role="tab" aria-selected="false">Pausa Longa</button>
+    </nav>
 
-  <!-- Histórico de Sessões -->
-  <section class="history-card" aria-label="Histórico de sessões">
-    <div class="history-header">
-      <h3>Histórico de Hoje</h3>
-      <button class="history-clear" id="clearHistoryBtn">Limpar</button>
-    </div>
-    <ul class="history-list" id="historyList">
-      <li class="history-empty" id="historyEmpty">
-        Nenhuma sessão ainda. Vamos começar! 🚀
-      </li>
-    </ul>
-  </section>
-
-</div>
-
-<!-- ═══════════════════════ PAINEL DE CONFIG ═══════════════════════ -->
-<div class="overlay" id="overlay" role="dialog" aria-modal="true">
-  <div class="settings-panel">
-    <h2>⚙️ Configurações</h2>
-
-    <!-- Durações -->
-    <div class="s-group">
-      <div class="s-group__label">Duração (minutos)</div>
-      <div class="s-row">
-        <div class="s-field">
-          <label for="inWork">Foco</label>
-          <input type="number" id="inWork" min="1" max="90" value="25">
-        </div>
-        <div class="s-field">
-          <label for="inShort">Pausa Curta</label>
-          <input type="number" id="inShort" min="1" max="30" value="5">
-        </div>
-        <div class="s-field">
-          <label for="inLong">Pausa Longa</label>
-          <input type="number" id="inLong" min="1" max="60" value="15">
+    <!-- Timer -->
+    <main class="timer-card">
+      <div class="ring-wrap" id="ringWrap">
+        <svg class="ring-svg" viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="ring-bg"  cx="100" cy="100" r="86"/>
+          <circle class="ring-bar" cx="100" cy="100" r="86" id="ringBar"/>
+        </svg>
+        <div class="ring-center">
+          <span class="time-display" id="timerDisplay" aria-live="polite">25:00</span>
+          <span class="time-label"   id="modeLabel">FOCO</span>
         </div>
       </div>
-    </div>
 
-    <!-- Comportamento -->
-    <div class="s-group">
-      <div class="s-group__label">Comportamento</div>
-
-      <div class="s-toggle-row">
-        <span>Avançar automaticamente</span>
-        <label class="toggle">
-          <input type="checkbox" id="inAutoAdvance" checked>
-          <span class="toggle-track"></span>
-        </label>
+      <div class="ctrl-row">
+        <button class="ctrl-btn" id="resetBtn" title="Resetar" aria-label="Resetar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+        </button>
+        <button class="play-btn" id="startBtn">Iniciar</button>
+        <button class="ctrl-btn" id="skipBtn" title="Pular fase" aria-label="Pular fase">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        </button>
       </div>
 
-      <div class="s-toggle-row">
-        <span>Notificações sonoras</span>
-        <label class="toggle">
-          <input type="checkbox" id="inSound" checked>
-          <span class="toggle-track"></span>
-        </label>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-val" id="sessionLabel">Pomodoro #1</span>
+          <span class="stat-key">Sessão</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-val" id="cyclesCount">0</span>
+          <span class="stat-key">Ciclos Hoje</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-val" id="focusTime">0min</span>
+          <span class="stat-key">Tempo Foco</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Quote -->
+    <p class="quote" id="quoteCard" aria-live="polite">
+      ✨ Comece por onde você está. Use o que você tem. Faça o que você pode.
+    </p>
+
+    <!-- Music player -->
+    <section class="glass-card music-card">
+      <button class="music-header" id="musicHeader" aria-expanded="true">
+        <div class="music-info">
+          <span class="music-dot" id="musicDot"></span>
+          <span class="music-name">Lofi Hip Hop — beats to study/relax</span>
+        </div>
+        <svg class="chevron" id="musicChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="music-body" id="musicBody">
+        <div class="video-ratio">
+          <iframe
+            id="ytPlayer"
+            src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=0&controls=1&modestbranding=1&rel=0&color=white"
+            title="Lofi Hip Hop Radio"
+            allow="autoplay; encrypted-media"
+            allowfullscreen
+            loading="lazy"
+          ></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="glass-card history-card">
+      <div class="card-head">
+        <span class="card-title">Histórico de Hoje</span>
+        <button class="link-btn" id="clearHistoryBtn">Limpar</button>
+      </div>
+      <ul class="history-list" id="historyList">
+        <li class="history-empty" id="historyEmpty">Nenhuma sessão ainda — vamos começar! 🚀</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <!-- ══════════════════ SETTINGS OVERLAY ══════════════════ -->
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-label="Configurações">
+    <div class="settings-panel">
+
+      <div class="settings-head">
+        <h2>Configurações</h2>
+        <button class="icon-btn" id="settingsClose" aria-label="Fechar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
-      <div class="s-toggle-row">
-        <span>Notificações do navegador</span>
-        <label class="toggle">
-          <input type="checkbox" id="inBrowserNotif">
-          <span class="toggle-track"></span>
-        </label>
+      <div class="s-group">
+        <p class="s-label">Duração (minutos)</p>
+        <div class="s-row">
+          <div class="s-field"><label for="inWork">Foco</label><input type="number" id="inWork" min="1" max="90" value="25"></div>
+          <div class="s-field"><label for="inShort">Pausa Curta</label><input type="number" id="inShort" min="1" max="30" value="5"></div>
+          <div class="s-field"><label for="inLong">Pausa Longa</label><input type="number" id="inLong" min="1" max="60" value="15"></div>
+        </div>
       </div>
 
-      <div class="s-toggle-row">
-        <span>Pomodoros antes da pausa longa</span>
-        <input type="number" id="inPomodorosLong" min="2" max="8" value="4"
-          style="width:56px;background:var(--surface-2);border:1px solid var(--border);
-                 border-radius:var(--r-sm);color:var(--text);font-family:var(--font);
-                 font-size:0.9rem;font-weight:600;padding:0.38rem 0.5rem;
-                 text-align:center;outline:none;">
+      <div class="s-group">
+        <p class="s-label">Comportamento</p>
+        <div class="s-toggle">
+          <span>Avançar automaticamente</span>
+          <label class="switch"><input type="checkbox" id="inAutoAdvance" checked><span class="sw-track"></span></label>
+        </div>
+        <div class="s-toggle">
+          <span>Notificações sonoras</span>
+          <label class="switch"><input type="checkbox" id="inSound" checked><span class="sw-track"></span></label>
+        </div>
+        <div class="s-toggle">
+          <span>Notificações do navegador</span>
+          <label class="switch"><input type="checkbox" id="inBrowserNotif"><span class="sw-track"></span></label>
+        </div>
+        <div class="s-toggle">
+          <span>Pomodoros até pausa longa</span>
+          <input type="number" id="inPomodorosLong" min="2" max="8" value="4" class="s-num">
+        </div>
       </div>
-    </div>
 
-    <div class="s-footer">
-      <button class="btn-cancel" id="settingsCancel">Cancelar</button>
-      <button class="btn-save"   id="settingsSave">Salvar</button>
+      <div class="s-foot">
+        <button class="btn-ghost" id="settingsCancel">Cancelar</button>
+        <button class="btn-solid" id="settingsSave">Salvar</button>
+      </div>
+
     </div>
   </div>
-</div>
 
-<!-- Matrix Canvas (atrás de tudo) -->
-<canvas id="matrix"></canvas>
+  <!-- Toast -->
+  <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 
-<!-- Toast -->
-<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
-
-<!-- ═══════════════════════════ SCRIPT ═══════════════════════════ -->
-<script>
-/* =====================================================================
-   FOCUS TIMER — Pomodoro App
-   Arquivo único · HTML + CSS + JS puro · Sem dependências externas
-===================================================================== */
-
-// ─── Configuração de modos ────────────────────────────────────────────
-const MODES = {
-  work:  { label: 'Foco',        color: '#7c6ff7', glow: 'rgba(124,111,247,0.25)' },
-  short: { label: 'Pausa Curta', color: '#4ecdc4', glow: 'rgba(78,205,196,0.25)'  },
-  long:  { label: 'Pausa Longa', color: '#45b7d1', glow: 'rgba(69,183,209,0.25)'  },
-};
-
-// ─── Frases motivacionais ─────────────────────────────────────────────
-const QUOTES = {
-  work: [
-    '✨ Foco total. O sucesso é construído bloco a bloco.',
-    '🧠 Concentração profunda é o superpoder do século 21.',
-    '💡 Uma tarefa de cada vez. Você consegue.',
-    '🎯 Elimine distrações. Este tempo é seu.',
-    '⚡ Progresso, não perfeição. Continue.',
-    '🔥 Grandes resultados vêm de esforços consistentes.',
-    '📚 Aprender é uma aventura. Mergulhe fundo.',
-    '🌱 Cada sessão planta uma semente de conhecimento.',
-    '🚀 Comece onde você está. Faça o que pode.',
-  ],
-  short: [
-    '☕ Pausa merecida! Hidrate-se e respire fundo.',
-    '🚶 Levante e estique as pernas por um momento.',
-    '😌 Relaxe os olhos — olhe para longe por 20 segundos.',
-    '🌊 Respire: 4s inspirando, 4s segurando, 4s expirando.',
-    '💧 Hora de beber água! Seu cérebro agradece.',
-  ],
-  long: [
-    '🎉 Ciclo completo concluído — pausa longa merecida!',
-    '🌿 Descanse bem. A mente precisa recarregar para brilhar.',
-    '🏆 Excelente trabalho! Aproveite esse intervalo.',
-    '🎵 Ouça algo relaxante, alongue o corpo.',
-    '⭐ Você é consistente e comprometido. Orgulhe-se!',
-  ],
-};
-
-// ─── Estado global ────────────────────────────────────────────────────
-const state = {
-  mode:              'work',
-  running:           false,
-  timeLeft:          0,
-  totalTime:         0,
-  pomodoroCount:     0,   // pomodoros no ciclo atual (reseta após pausa longa)
-  completedToday:    0,   // total de pomodoros concluídos hoje
-  totalFocusMin:     0,   // minutos de foco acumulados hoje
-  interval:          null,
-  settings:          loadSettings(),
-  history:           loadHistory(),
-};
-
-// Circunferência do anel: r=95  →  C = 2π·95 ≈ 596.9
-const CIRC = 2 * Math.PI * 95;
-
-// ─── Referências DOM ──────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const dom = {
-  timerDisplay:  $('timerDisplay'),
-  modeLabel:     $('modeLabel'),
-  startBtn:      $('startBtn'),
-  resetBtn:      $('resetBtn'),
-  skipBtn:       $('skipBtn'),
-  ringProgress:  $('ringProgress'),
-  ringWrapper:   $('ringWrapper'),
-  sessionLabel:  $('sessionLabel'),
-  cyclesCount:   $('cyclesCount'),
-  focusTime:     $('focusTime'),
-  quoteCard:     $('quoteCard'),
-  historyList:   $('historyList'),
-  historyEmpty:  $('historyEmpty'),
-  clearHistBtn:  $('clearHistoryBtn'),
-  themeBtn:      $('themeBtn'),
-  settingsBtn:   $('settingsBtn'),
-  overlay:       $('overlay'),
-  settingsCancel:$('settingsCancel'),
-  settingsSave:  $('settingsSave'),
-  toast:         $('toast'),
-  // inputs de config
-  inWork:         $('inWork'),
-  inShort:        $('inShort'),
-  inLong:         $('inLong'),
-  inAutoAdvance:  $('inAutoAdvance'),
-  inSound:        $('inSound'),
-  inBrowserNotif: $('inBrowserNotif'),
-  inPomodorosLong:$('inPomodorosLong'),
-};
-
-dom.ringProgress.style.strokeDasharray = CIRC;
-
-// ═══════════════════════════════════════════════════════════════════════
-// PERSISTÊNCIA
-// ═══════════════════════════════════════════════════════════════════════
-
-function loadSettings() {
-  const defaults = {
-    work: 25, short: 5, long: 15,
-    autoAdvance: true, sound: true, browserNotif: false,
-    pomodorosBeforeLong: 4,
-  };
-  try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem('ftSettings') || '{}') };
-  } catch { return defaults; }
-}
-
-function saveSettings() {
-  localStorage.setItem('ftSettings', JSON.stringify(state.settings));
-}
-
-function loadHistory() {
-  try {
-    const all   = JSON.parse(localStorage.getItem('ftHistory') || '[]');
-    const today = new Date().toDateString();
-    return all.filter(e => new Date(e.ts).toDateString() === today);
-  } catch { return []; }
-}
-
-function persistHistory() {
-  try {
-    const all    = JSON.parse(localStorage.getItem('ftHistory') || '[]');
-    const cutoff = Date.now() - 30 * 86400000;
-    const today  = new Date().toDateString();
-    const others = all.filter(e => e.ts > cutoff && new Date(e.ts).toDateString() !== today);
-    localStorage.setItem('ftHistory', JSON.stringify([...others, ...state.history]));
-  } catch {}
-}
-
-function addSessionToHistory(mode, durationMin) {
-  state.history.unshift({ mode, duration: durationMin, ts: Date.now(), label: MODES[mode].label });
-  persistHistory();
-  renderHistory();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// ÁUDIO (Web Audio API — sem arquivos externos)
-// ═══════════════════════════════════════════════════════════════════════
-
-let audioCtx = null;
-
-function ensureAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
-}
-
-function beep(freq, dur, type = 'sine', vol = 0.28) {
-  if (!state.settings.sound) return;
-  try {
-    const ctx  = ensureAudio();
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = type;
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + dur);
-  } catch {}
-}
-
-// Três notas ascendentes — fim de foco
-function soundWorkEnd() {
-  beep(523, 0.15);
-  setTimeout(() => beep(659, 0.15), 180);
-  setTimeout(() => beep(784, 0.30), 360);
-}
-
-// Três notas descendentes — fim de pausa
-function soundBreakEnd() {
-  beep(784, 0.15);
-  setTimeout(() => beep(659, 0.15), 180);
-  setTimeout(() => beep(523, 0.30), 360);
-}
-
-// Tique suave nos últimos 5 segundos
-function soundTick() { beep(900, 0.04, 'square', 0.04); }
-
-// ═══════════════════════════════════════════════════════════════════════
-// NOTIFICAÇÕES DO NAVEGADOR
-// ═══════════════════════════════════════════════════════════════════════
-
-async function requestNotifPermission() {
-  if (!('Notification' in window)) return false;
-  if (Notification.permission === 'granted') return true;
-  return (await Notification.requestPermission()) === 'granted';
-}
-
-function sendBrowserNotif(title, body) {
-  if (!state.settings.browserNotif || Notification.permission !== 'granted') return;
-  new Notification(title, {
-    body,
-    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍅</text></svg>',
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// TEMA
-// ═══════════════════════════════════════════════════════════════════════
-
-function toggleTheme() {
-  const html  = document.documentElement;
-  const isDark = html.getAttribute('data-theme') === 'dark';
-  const next   = isDark ? 'light' : 'dark';
-  html.setAttribute('data-theme', next);
-  dom.themeBtn.textContent = isDark ? '☀️' : '🌙';
-  localStorage.setItem('ftTheme', next);
-}
-
-function loadTheme() {
-  const saved = localStorage.getItem('ftTheme') || 'dark';
-  document.documentElement.setAttribute('data-theme', saved);
-  dom.themeBtn.textContent = saved === 'dark' ? '🌙' : '☀️';
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// CORES DE MODO
-// ═══════════════════════════════════════════════════════════════════════
-
-function applyModeColors(mode) {
-  const { color, glow } = MODES[mode];
-  // Aplica como variáveis CSS na raiz para que todos os seletores as leiam
-  document.documentElement.style.setProperty('--mode-color', color);
-  document.documentElement.style.setProperty('--mode-glow',  glow);
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// TIMER CORE
-// ═══════════════════════════════════════════════════════════════════════
-
-function getDuration(mode) {
-  return { work: state.settings.work, short: state.settings.short, long: state.settings.long }[mode] * 60;
-}
-
-/* Troca de modo (reinicia o timer por padrão) */
-function setMode(mode, reset = true) {
-  state.mode = mode;
-
-  // Atualiza abas
-  document.querySelectorAll('.mode-tab').forEach(btn => {
-    const active = btn.dataset.mode === mode;
-    btn.classList.toggle('active', active);
-    btn.setAttribute('aria-selected', active);
-  });
-
-  applyModeColors(mode);
-  dom.modeLabel.textContent = MODES[mode].label;
-
-  if (reset) {
-    stopTimer();
-    state.timeLeft  = getDuration(mode);
-    state.totalTime = state.timeLeft;
-    updateDisplay();
-    updateRing();
-  }
-
-  updateSessionLabel();
-  updateQuote(mode);
-}
-
-function startTimer() {
-  if (state.running) return;
-  state.running = true;
-  dom.startBtn.textContent = 'Pausar';
-  dom.ringWrapper.classList.add('running');
-  ensureAudio(); // desbloqueio de áudio em gesto do usuário
-
-  state.interval = setInterval(() => {
-    if (state.timeLeft > 0) {
-      state.timeLeft--;
-      if (state.timeLeft <= 5 && state.timeLeft > 0) soundTick();
-      updateDisplay();
-      updateRing();
-    } else {
-      onTimerEnd();
-    }
-  }, 1000);
-}
-
-function pauseTimer() {
-  if (!state.running) return;
-  state.running = false;
-  clearInterval(state.interval);
-  dom.startBtn.textContent = 'Continuar';
-  dom.ringWrapper.classList.remove('running');
-}
-
-function stopTimer() {
-  state.running = false;
-  clearInterval(state.interval);
-  dom.startBtn.textContent = 'Iniciar';
-  dom.ringWrapper.classList.remove('running');
-}
-
-function resetTimer() {
-  stopTimer();
-  state.timeLeft  = getDuration(state.mode);
-  state.totalTime = state.timeLeft;
-  updateDisplay();
-  updateRing();
-}
-
-/* Chamado quando o timer chega a zero */
-function onTimerEnd() {
-  stopTimer();
-  const done = state.mode;
-
-  // Som
-  done === 'work' ? soundWorkEnd() : soundBreakEnd();
-
-  // Histórico e contadores
-  addSessionToHistory(done, state.settings[done]);
-
-  if (done === 'work') {
-    state.pomodoroCount++;
-    state.completedToday++;
-    state.totalFocusMin += state.settings.work;
-    updateStats();
-  }
-
-  // Mensagem de conclusão
-  const msgs = {
-    work:  ['Sessão de foco concluída! 🎉', 'Hora de uma pausa merecida.'],
-    short: ['Pausa curta encerrada!',        'Pronto para mais uma sessão?'],
-    long:  ['Pausa longa encerrada! ⭐',     'Você está arrasando!'],
-  };
-  showToast(msgs[done][0]);
-  sendBrowserNotif(...msgs[done]);
-
-  // Avança para o próximo modo
-  const nextMode = resolveNextMode(done);
-
-  if (state.settings.autoAdvance) {
-    setTimeout(() => { setMode(nextMode); startTimer(); }, 1500);
-  } else {
-    setMode(nextMode);
-  }
-}
-
-/* Determina qual modo vem a seguir e gerencia o contador de ciclo */
-function resolveNextMode(completedMode) {
-  if (completedMode !== 'work') return 'work';
-
-  if (state.pomodoroCount >= state.settings.pomodorosBeforeLong) {
-    state.pomodoroCount = 0;
-    return 'long';
-  }
-  return 'short';
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// ATUALIZAÇÃO DE UI
-// ═══════════════════════════════════════════════════════════════════════
-
-function updateDisplay() {
-  const m = String(Math.floor(state.timeLeft / 60)).padStart(2, '0');
-  const s = String(state.timeLeft % 60).padStart(2, '0');
-  dom.timerDisplay.textContent = `${m}:${s}`;
-  document.title = `${m}:${s} — Focus Timer`;
-}
-
-function updateRing() {
-  const pct    = state.totalTime > 0 ? state.timeLeft / state.totalTime : 1;
-  const offset = CIRC * (1 - pct);
-  dom.ringProgress.style.strokeDashoffset = offset;
-}
-
-function updateSessionLabel() {
-  if (state.mode === 'work') {
-    dom.sessionLabel.textContent = `Pomodoro #${state.completedToday + 1}`;
-  } else {
-    dom.sessionLabel.textContent = MODES[state.mode].label;
-  }
-}
-
-function updateStats() {
-  dom.cyclesCount.textContent = state.completedToday;
-  const h = Math.floor(state.totalFocusMin / 60);
-  const m = state.totalFocusMin % 60;
-  dom.focusTime.textContent = h > 0 ? `${h}h${m}min` : `${m}min`;
-  updateSessionLabel();
-}
-
-function updateQuote(mode) {
-  const pool  = QUOTES[mode] || QUOTES.work;
-  const quote = pool[Math.floor(Math.random() * pool.length)];
-  dom.quoteCard.classList.remove('fade-in');
-  void dom.quoteCard.offsetWidth; // força reflow para reiniciar animação
-  dom.quoteCard.textContent = quote;
-  dom.quoteCard.classList.add('fade-in');
-}
-
-function renderHistory() {
-  // Remove itens antigos (mantém o placeholder)
-  Array.from(dom.historyList.children).forEach(c => {
-    if (c.id !== 'historyEmpty') c.remove();
-  });
-
-  if (state.history.length === 0) {
-    dom.historyEmpty.style.display = '';
-    return;
-  }
-  dom.historyEmpty.style.display = 'none';
-
-  state.history.slice(0, 25).forEach(entry => {
-    const li   = document.createElement('li');
-    li.className = 'history-item';
-
-    const dot  = document.createElement('span');
-    dot.className = 'h-dot';
-    dot.style.background = MODES[entry.mode]?.color || '#888';
-
-    const info = document.createElement('span');
-    info.className = 'h-info';
-    info.textContent = `${entry.label} — ${entry.duration}min`;
-
-    const time = document.createElement('span');
-    time.className = 'h-time';
-    time.textContent = new Date(entry.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-    li.append(dot, info, time);
-    dom.historyList.appendChild(li);
-  });
-}
-
-// ─── Toast ────────────────────────────────────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  clearTimeout(toastTimer);
-  dom.toast.textContent = msg;
-  dom.toast.classList.add('show');
-  toastTimer = setTimeout(() => dom.toast.classList.remove('show'), 3200);
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// PAINEL DE CONFIGURAÇÕES
-// ═══════════════════════════════════════════════════════════════════════
-
-function openSettings() {
-  dom.inWork.value          = state.settings.work;
-  dom.inShort.value         = state.settings.short;
-  dom.inLong.value          = state.settings.long;
-  dom.inAutoAdvance.checked = state.settings.autoAdvance;
-  dom.inSound.checked       = state.settings.sound;
-  dom.inBrowserNotif.checked= state.settings.browserNotif;
-  dom.inPomodorosLong.value = state.settings.pomodorosBeforeLong;
-  dom.overlay.classList.add('open');
-}
-
-function closeSettings() {
-  dom.overlay.classList.remove('open');
-}
-
-function applySettings() {
-  state.settings.work              = Math.max(1, parseInt(dom.inWork.value)          || 25);
-  state.settings.short             = Math.max(1, parseInt(dom.inShort.value)         || 5);
-  state.settings.long              = Math.max(1, parseInt(dom.inLong.value)          || 15);
-  state.settings.autoAdvance       = dom.inAutoAdvance.checked;
-  state.settings.sound             = dom.inSound.checked;
-  state.settings.browserNotif      = dom.inBrowserNotif.checked;
-  state.settings.pomodorosBeforeLong = Math.max(2, parseInt(dom.inPomodorosLong.value) || 4);
-
-  if (state.settings.browserNotif) {
-    requestNotifPermission().then(ok => {
-      if (!ok) {
-        state.settings.browserNotif = false;
-        dom.inBrowserNotif.checked  = false;
-        showToast('Permissão de notificação negada.');
-      }
-    });
-  }
-
-  saveSettings();
-  closeSettings();
-  resetTimer(); // aplica novos tempos imediatamente
-  showToast('Configurações salvas ✓');
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// EVENT LISTENERS
-// ═══════════════════════════════════════════════════════════════════════
-
-dom.startBtn.addEventListener('click', () => {
-  state.running ? pauseTimer() : startTimer();
-});
-
-dom.resetBtn.addEventListener('click', resetTimer);
-
-dom.skipBtn.addEventListener('click', () => {
-  stopTimer();
-  // Avança ciclo manualmente, mas não conta como concluído
-  if (state.mode === 'work') {
-    state.pomodoroCount++;
-    setMode(resolveNextMode('work'));
-  } else {
-    setMode('work');
-  }
-});
-
-document.querySelectorAll('.mode-tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (state.running && !confirm('O timer está rodando. Deseja trocar de modo mesmo assim?')) return;
-    setMode(btn.dataset.mode);
-  });
-});
-
-dom.themeBtn.addEventListener('click', toggleTheme);
-dom.settingsBtn.addEventListener('click', openSettings);
-dom.settingsCancel.addEventListener('click', closeSettings);
-dom.settingsSave.addEventListener('click', applySettings);
-
-// Fecha ao clicar fora do painel
-dom.overlay.addEventListener('click', e => {
-  if (e.target === dom.overlay) closeSettings();
-});
-
-dom.clearHistBtn.addEventListener('click', () => {
-  if (!confirm('Limpar todo o histórico de hoje?')) return;
-  state.history          = [];
-  state.completedToday   = 0;
-  state.totalFocusMin    = 0;
-  state.pomodoroCount    = 0;
-  persistHistory();
-  renderHistory();
-  updateStats();
-  showToast('Histórico limpo.');
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// INICIALIZAÇÃO
-// ═══════════════════════════════════════════════════════════════════════
-
-function init() {
-  loadTheme();
-
-  // Recalcula estatísticas a partir do histórico salvo
-  state.history.forEach(entry => {
-    if (entry.mode === 'work') {
-      state.completedToday++;
-      state.totalFocusMin += entry.duration;
-    }
-  });
-
-  setMode('work');
-  updateStats();
-  renderHistory();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// MATRIX BACKGROUND
-// ═══════════════════════════════════════════════════════════════════════
-(function () {
-  const canvas   = document.getElementById('matrix');
-  const ctx      = canvas.getContext('2d');
-  const fontSize = 14;
-  const chars    = '01';
-  let columns, drops;
-
-  function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-    columns = Math.floor(canvas.width / fontSize);
-    drops   = Array(columns).fill(1);
-  }
-
-  function drawMatrix() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgb(0, 157, 255)';
-    ctx.font      = `${fontSize}px monospace`;
-
-    for (let i = 0; i < drops.length; i++) {
-      const char = chars[Math.floor(Math.random() * chars.length)];
-      ctx.fillText(char, i * fontSize, drops[i] * fontSize);
-      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
-      drops[i]++;
-    }
-  }
-
-  resize();
-  window.addEventListener('resize', resize);
-  setInterval(drawMatrix, 33);
-})();
-
-init();
-</script>
+  <script src="script.js"></script>
 </body>
 </html>
